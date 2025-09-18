@@ -11,9 +11,14 @@ public class FrogController : MonoBehaviour
     [SerializeField] TextMeshProUGUI healthText;
     int currentHealth;
 
-    [Header("Tongue Parameters")]
-    [SerializeField] float tongueLength;
-    [SerializeField] float tongueForceOffset;
+    [Header("Grapple Parameters")]
+    [SerializeField] float grappleLength = 15f;
+    [SerializeField] float grapplingSpeed = 600f;
+    [SerializeField] float grapplingAcceleration = 5f;
+    Vector3 prevPosition;
+    Vector3 hookPosition;
+    int consecutiveStalls = 0;
+    bool grappling = false;
 
     [Header("Movement Parameters")]
     [SerializeField] float walkSpeed = 12f;
@@ -125,8 +130,15 @@ public class FrogController : MonoBehaviour
         LookAtMouse();
         HandlePlayerHealth();
 
-        if (isGrounded) Move(groundAcceleration, groundDeceleration, InputManager.Movement);
-        else Move(airAcceleration, airDeceleration, InputManager.Movement);
+        if (!grappling)
+        {
+            if (isGrounded) Move(groundAcceleration, groundDeceleration, InputManager.Movement);
+            else Move(airAcceleration, airDeceleration, InputManager.Movement);
+        }
+        else
+        {
+            Grappling();
+        }
     }
 
     #region Player Data
@@ -180,44 +192,73 @@ public class FrogController : MonoBehaviour
         Vector2 direction = (mousePosition - headPos).normalized;
 
         if (InputManager.AttackWasPressed) print("Attack!");
-        RaycastHit2D tongueHit = Physics2D.Raycast(headPos, direction, tongueLength);
-        Vector2 endPoint = headPos + direction * tongueLength;
+        RaycastHit2D grappleHit = Physics2D.Raycast(headPos, direction, grappleLength);
+        Vector2 endPoint = headPos + direction * grappleLength;
 
-        Debug.DrawLine(headPos, endPoint, tongueHit ? Color.red : Color.green);
+        Debug.DrawLine(headPos, endPoint, grappleHit ? Color.red : Color.green);
 
-        if (tongueHit)
+        if (grappleHit)
         {
-            if(tongueHit.collider.gameObject.layer == 7)    //if tongue hits an object with layer 7 (Hook)
+            if(grappleHit.collider.gameObject.layer == 7)    //if tongue hits an object with layer 7 (Hook)
             {
                 if (InputManager.AttackWasPressed)
                 {
-                    GrappleTowards(direction);
+                    consecutiveStalls = 0;
+                    hookPosition = grappleHit.transform.position;
+                    MoveToGrapple();
                 }
             }
-            else if(tongueHit.collider.gameObject.layer == 9)   //if tongue hits an enemy
+            else if(grappleHit.collider.gameObject.layer == 9)   //if tongue hits an enemy
             {
                 if (InputManager.AttackWasPressed)
                 {
-                    EnemyAI hitEnemy = tongueHit.collider.GetComponent<EnemyAI>();
+                    EnemyAI hitEnemy = grappleHit.collider.GetComponent<EnemyAI>();
                     hitEnemy.TakeDamage(1);
                 }
             }
-            /*else if(tongueHit.collider.gameObject.layer == )
+            /*else if(grappleHit.collider.gameObject.layer == )
              * if hit enemy, deal damage to enemy
              */
         }
     }
 
-    void GrappleTowards(Vector2 direction)
+    void Grappling()
     {
+        prevPosition = transform.position;
+
         //[!] feels very bad need to refactor
         if (!isJumping) isJumping = true;
 
         jumpBufferTimer = 0f;
         numberofJumpsUsed += 1;
 
-        VerticalVelocity = 100f * tongueForceOffset;
-        rb.velocity = new Vector2(direction.x, rb.velocity.y);
+        Vector2 shmoovement = (hookPosition - transform.position).normalized * grapplingSpeed;
+        moveVelocity = Vector2.Lerp(moveVelocity, shmoovement, grapplingAcceleration * Time.fixedDeltaTime);
+        rb.velocity = new Vector2(moveVelocity.x, moveVelocity.y);
+
+        if (Vector3.Distance(transform.position, hookPosition) < 5)
+        {
+            UnhookGrappling();
+        } 
+        else if(Vector3.Distance(transform.position, prevPosition) < 0.1)
+        {
+            consecutiveStalls += 1;
+            if (consecutiveStalls == 2) UnhookGrappling();
+        }
+        else
+        {
+            consecutiveStalls = 0;
+        }
+    }
+
+    void UnhookGrappling()
+    {
+        grappling = false;
+    }
+
+    void MoveToGrapple()
+    {
+        grappling = true;
     }
 
     #endregion
@@ -252,13 +293,13 @@ public class FrogController : MonoBehaviour
     {
         if (turnRight)
         {
-            turnRight = true;
-            bodyColl.gameObject.transform.Rotate(0, 180f, 0);
+            facingRight = true;
+            bodyColl.gameObject.transform.Rotate(0, -180f, 0);
         }
         else
         {
-            turnRight = false;
-            bodyColl.gameObject.transform.Rotate(0, -180f, 0);
+            facingRight = false;
+            bodyColl.gameObject.transform.Rotate(0, 180f, 0);
         }
     }
     #endregion
