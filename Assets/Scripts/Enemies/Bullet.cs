@@ -24,9 +24,11 @@ public class Bullet : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (other.CompareTag("Player") || other.gameObject.layer == LayerMask.NameToLayer("Ground"))
+        if (other.CompareTag("Player"))
         {
-            Destroy(gameObject); // Despawn on player hit
+            other.GetComponent<FrogController>().TakeDamage();
+            Destroy(gameObject);    //despawn on hit
         }
+
     }
 }

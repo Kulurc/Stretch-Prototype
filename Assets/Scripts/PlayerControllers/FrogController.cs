@@ -1,10 +1,20 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using Unity.VisualScripting;
 using UnityEngine;
 
 public class FrogController : MonoBehaviour
 {
+    [Header("Player Variables")]
+    [SerializeField] int maxHealth = 3;
+    [SerializeField] TextMeshProUGUI healthText;
+    int currentHealth;
+
+    [Header("Tongue Parameters")]
+    [SerializeField] float tongueLength;
+    [SerializeField] float tongueForceOffset;
+
     [Header("Movement Parameters")]
     [SerializeField] float walkSpeed = 12f;
     [SerializeField] float groundAcceleration = 5f;
@@ -18,7 +28,7 @@ public class FrogController : MonoBehaviour
     float jumpHeightCompensationFactor = 1.854f;
     float TimeTillJumpApex = 0.35f;
     float GravityOnReleaseMultiplier = 2f;
-    float maxFallSpeed = 20f;
+    float maxFallSpeed = 15f;
 
     //Jump Cut
     float TimeForUpwardsCancel = 0.027f;
@@ -78,6 +88,7 @@ public class FrogController : MonoBehaviour
 
     Vector2 moveVelocity;
     bool facingRight;
+    Vector2 mousePosition;
 
     RaycastHit2D groundHit;
     RaycastHit2D headHit;
@@ -93,12 +104,18 @@ public class FrogController : MonoBehaviour
         AdjustedJumpHeight = jumpHeight * jumpHeightCompensationFactor;
         Gravity = -(2f * AdjustedJumpHeight) / Mathf.Pow(TimeTillJumpApex, 2f);
         InitialJumpVelocity = Mathf.Abs(Gravity) * TimeTillJumpApex;
+
+        currentHealth = maxHealth;
     }
 
     private void Update()
     {
         CountTimers();
         JumpChecks();
+        TongueControls();
+
+        if (Input.GetKey(KeyCode.R)) ResetPlayer();
+        if (Input.GetKeyDown(KeyCode.Return)) TakeDamage();
     }
 
     private void FixedUpdate()
@@ -106,16 +123,47 @@ public class FrogController : MonoBehaviour
         CollisionChecks();
         Jump();
         LookAtMouse();
-
-        if (InputManager.AttackWasPressed) transform.position = playerPos.position;
+        HandlePlayerHealth();
 
         if (isGrounded) Move(groundAcceleration, groundDeceleration, InputManager.Movement);
         else Move(airAcceleration, airDeceleration, InputManager.Movement);
     }
 
+    #region Player Data
+
+    void HandlePlayerHealth()
+    {
+        if (currentHealth <= 0) { 
+            healthText.text = "DEAD";
+            return;
+        }
+
+        healthText.text = currentHealth.ToString();
+    }
+
+    public void TakeDamage()
+    {
+        --currentHealth;
+
+        if(currentHealth <= 0)
+        {
+            //Die logic
+        }
+    }
+
+    void ResetPlayer()
+    {
+        transform.position = playerPos.position;
+        currentHealth = maxHealth;
+    }
+
+    #endregion
+
+    #region Mouse Controls
+
     void LookAtMouse()
     {
-        Vector2 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         Vector2 direction = mousePosition - (Vector2)head.transform.position;
 
         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
@@ -125,6 +173,54 @@ public class FrogController : MonoBehaviour
 
         head.transform.rotation = Quaternion.Euler(0f, 0f, angle);
     }
+
+    void TongueControls()
+    {
+        Vector2 headPos = (Vector2)head.transform.position;
+        Vector2 direction = (mousePosition - headPos).normalized;
+
+        if (InputManager.AttackWasPressed) print("Attack!");
+        RaycastHit2D tongueHit = Physics2D.Raycast(headPos, direction, tongueLength);
+        Vector2 endPoint = headPos + direction * tongueLength;
+
+        Debug.DrawLine(headPos, endPoint, tongueHit ? Color.red : Color.green);
+
+        if (tongueHit)
+        {
+            if(tongueHit.collider.gameObject.layer == 7)    //if tongue hits an object with layer 7 (Hook)
+            {
+                if (InputManager.AttackWasPressed)
+                {
+                    GrappleTowards(direction);
+                }
+            }
+            else if(tongueHit.collider.gameObject.layer == 9)   //if tongue hits an enemy
+            {
+                if (InputManager.AttackWasPressed)
+                {
+                    EnemyAI hitEnemy = tongueHit.collider.GetComponent<EnemyAI>();
+                    hitEnemy.TakeDamage(1);
+                }
+            }
+            /*else if(tongueHit.collider.gameObject.layer == )
+             * if hit enemy, deal damage to enemy
+             */
+        }
+    }
+
+    void GrappleTowards(Vector2 direction)
+    {
+        //[!] feels very bad need to refactor
+        if (!isJumping) isJumping = true;
+
+        jumpBufferTimer = 0f;
+        numberofJumpsUsed += 1;
+
+        VerticalVelocity = 100f * tongueForceOffset;
+        rb.velocity = new Vector2(direction.x, rb.velocity.y);
+    }
+
+    #endregion
 
     #region Movement
     private void Move(float acceleration, float deceleration, Vector2 moveInput)
@@ -140,7 +236,7 @@ public class FrogController : MonoBehaviour
         }
         else
         {
-            moveVelocity = Vector2.Lerp(moveVelocity, Vector2.zero, deceleration * Time.deltaTime);
+            moveVelocity = Vector2.Lerp(moveVelocity, Vector2.zero, deceleration * Time.fixedDeltaTime);
             rb.velocity = new Vector2(moveVelocity.x, rb.velocity.y);
         }
     }
@@ -157,12 +253,12 @@ public class FrogController : MonoBehaviour
         if (turnRight)
         {
             turnRight = true;
-            transform.Rotate(0, 180f, 0);
+            bodyColl.gameObject.transform.Rotate(0, 180f, 0);
         }
         else
         {
             turnRight = false;
-            transform.Rotate(0, -180f, 0);
+            bodyColl.gameObject.transform.Rotate(0, -180f, 0);
         }
     }
     #endregion
@@ -401,10 +497,11 @@ public class FrogController : MonoBehaviour
 
     #endregion
 
+    //Unused
     #region Debug Visuals
     private void OnDrawGizmos()
     {
-        DebugJumpArc(walkSpeed, Color.white);
+        //DebugJumpArc(walkSpeed, Color.white);
     }
 
     void DebugJumpArc(float moveSpeed, Color gizmoColor)

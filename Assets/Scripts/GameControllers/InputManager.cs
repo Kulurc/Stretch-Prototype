@@ -34,6 +34,6 @@ public class InputManager : MonoBehaviour
         JumpIsHeld = jumpAction.IsPressed();
         JumpWasReleased = jumpAction.WasReleasedThisFrame();
 
-        AttackWasPressed = attackAction.IsPressed();
+        AttackWasPressed = attackAction.WasPressedThisFrame();
     }
 }
