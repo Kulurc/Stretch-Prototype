@@ -15,10 +15,13 @@ public class FrogController : MonoBehaviour
     [SerializeField] float grappleLength = 15f;
     [SerializeField] float grapplingSpeed = 600f;
     [SerializeField] float grapplingAcceleration = 5f;
+    [SerializeField] float grappleRechargeTime = 1f;
+    [SerializeField] float grappleMinDistance = 2f;
     Vector3 prevPosition;
     Vector3 hookPosition;
     int consecutiveStalls = 0;
     bool grappling = false;
+    bool canGrapple = true;
 
     [Header("Movement Parameters")]
     [SerializeField] float walkSpeed = 12f;
@@ -201,7 +204,7 @@ public class FrogController : MonoBehaviour
         {
             if(grappleHit.collider.gameObject.layer == 7)    //if tongue hits an object with layer 7 (Hook)
             {
-                if (InputManager.AttackWasPressed)
+                if (InputManager.AttackWasPressed && canGrapple)
                 {
                     consecutiveStalls = 0;
                     hookPosition = grappleHit.transform.position;
@@ -224,8 +227,6 @@ public class FrogController : MonoBehaviour
 
     void Grappling()
     {
-        prevPosition = transform.position;
-
         //[!] feels very bad need to refactor
         if (!isJumping) isJumping = true;
 
@@ -236,29 +237,44 @@ public class FrogController : MonoBehaviour
         moveVelocity = Vector2.Lerp(moveVelocity, shmoovement, grapplingAcceleration * Time.fixedDeltaTime);
         rb.velocity = new Vector2(moveVelocity.x, moveVelocity.y);
 
-        if (Vector3.Distance(transform.position, hookPosition) < 5)
+        if (Vector3.Distance(transform.position, hookPosition) < grappleMinDistance)
         {
+            canGrapple = false;
             UnhookGrappling();
         } 
-        else if(Vector3.Distance(transform.position, prevPosition) < 0.1)
+        else if(Vector3.Distance(transform.position, prevPosition) < 0.1f)
         {
             consecutiveStalls += 1;
-            if (consecutiveStalls == 2) UnhookGrappling();
+            if (consecutiveStalls == 2)
+            {
+                canGrapple = false;
+                print(Vector3.Distance(transform.position, prevPosition));
+                UnhookGrappling();
+            }
         }
         else
         {
             consecutiveStalls = 0;
         }
+
+        prevPosition = transform.position;
     }
 
     void UnhookGrappling()
     {
         grappling = false;
+
+        Invoke("ResetGrapple", grappleRechargeTime);
     }
 
     void MoveToGrapple()
     {
         grappling = true;
+    }
+
+    void ResetGrapple()
+    {
+        canGrapple = true;
     }
 
     #endregion
